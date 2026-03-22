@@ -1,6 +1,6 @@
 ;; RuRcoin (RURC) Jetton Minter
 ;; TON Mainnet | Supply: 10,000,000 | Decimals: 9
-;; Tax: 3% (50% burn, 50% to owner)
+;; Tax: 7% (10% burn, 90% to owner)
 ;; Owner: UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02
 
 #include "imports/stdlib.fc";
