@@ -45,19 +45,16 @@ jobs:
           mkdir -p contracts/imports
           wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -O contracts/imports/stdlib.fc
 
-      - name: Compile and convert to BOC
+      - name: Compile FunC to Fift
         run: |
           mkdir -p build
           func -o build/jetton-minter.fif -SPA contracts/imports/stdlib.fc contracts/jetton-minter.fc
           func -o build/jetton-wallet.fif -SPA contracts/imports/stdlib.fc contracts/jetton-wallet.fc
-          cat > build/save-minter.fif << 'EOF'
-"build/jetton-minter.fif" include
-2 boc+encode "build/jetton-minter.boc" B->file
-EOF
-          cat > build/save-wallet.fif << 'EOF'
-"build/jetton-wallet.fif" include
-2 boc+encode "build/jetton-wallet.boc" B->file
-EOF
+
+      - name: Convert Fift to BOC
+        run: |
+          printf '"%s" include\n2 boc+encode "%s" B->file\n' "build/jetton-minter.fif" "build/jetton-minter.boc" > build/save-minter.fif
+          printf '"%s" include\n2 boc+encode "%s" B->file\n' "build/jetton-wallet.fif" "build/jetton-wallet.boc" > build/save-wallet.fif
           fift -I $FIFTPATH -s build/save-minter.fif
           fift -I $FIFTPATH -s build/save-wallet.fif
           echo "BOC files:"
