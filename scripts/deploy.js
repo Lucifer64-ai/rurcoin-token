@@ -1,4 +1,4 @@
-const { TonClient, WalletContractV4, WalletContractV5R1, internal, fromNano, toNano } = require('@ton/ton');
+const { TonClient, WalletContractV4, internal, fromNano, toNano } = require('@ton/ton');
 const { mnemonicToPrivateKey } = require('@ton/crypto');
 const { Cell, Address, beginCell } = require('@ton/core');
 const fs = require('fs');
@@ -14,7 +14,7 @@ async function deploy() {
 
     console.log('🚀 Starting RURC deploy...');
     console.log('Owner address:', ownerAddress);
-    console.log('Wallet version: W5 (V5R1)');
+    console.log('Wallet version: V4R2');
 
     // Connect to TON mainnet
     const client = new TonClient({
@@ -22,16 +22,16 @@ async function deploy() {
         apiKey: apiKey,
     });
 
-    // Restore wallet from mnemonic (W5)
+    // Restore wallet from mnemonic (V4R2)
     const words = mnemonic.trim().split(' ');
     const keyPair = await mnemonicToPrivateKey(words);
-    const wallet = WalletContractV5R1.create({
+    const wallet = WalletContractV4.create({
         publicKey: keyPair.publicKey,
         workchain: 0,
     });
     const walletContract = client.open(wallet);
     const walletAddress = wallet.address.toString({ bounceable: false });
-    console.log('Deployer wallet (W5):', walletAddress);
+    console.log('Deployer wallet (V4R2):', walletAddress);
 
     // Check balance
     const balance = await walletContract.getBalance();
@@ -102,7 +102,7 @@ async function deploy() {
         ],
     });
 
-    console.log('📤 Deploy transaction sent. Waiting for confirmation...');
+    console.log('🐤 Deploy transaction sent. Waiting for confirmation...');
 
     // Wait for deploy
     for (let i = 0; i < 30; i++) {
