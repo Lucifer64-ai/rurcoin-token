@@ -1,6 +1,6 @@
 
 ;; RuRcoin (RURC) Jetton Wallet
-;; Tax: 3% per transfer (1.5% burn + 1.5% to owner UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02)
+;; Tax: 5% per transfer (1% burn + 4% to owner UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02)
 
 #include "imports/stdlib.fc";
 
@@ -12,18 +12,12 @@ const int op::burn                = 0x595f07bc;
 const int op::burn_notification   = 0x7bdd97de;
 
 ;; TAX CONFIG
-;; 3% total: 1.5% burn + 1.5% to owner
-;; owner = UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02
-const int TAX_NUMERATOR   = 3;    ;; 3%
-const int TAX_DENOMINATOR = 100;
-;; burn = 50% of tax, owner = 50% of tax
+;; 5% total: 1% burn + 4% to owner
+const int TAX_BURN_NUMERATOR  = 1;    ;; 1% сжигается
+const int TAX_OWNER_NUMERATOR = 4;    ;; 4% владельцу
+const int TAX_DENOMINATOR     = 100;
 
 ;; ── Storage ──────────────────────────────────────────────────────────
-;; balance: uint128
-;; owner_address: MsgAddress
-;; jetton_master_address: MsgAddress
-;; jetton_wallet_code: ^Cell
-
 (int, slice, slice, cell) load_data() inline {
     slice ds = get_data().begin_parse();
     return (
@@ -64,9 +58,9 @@ slice calculate_jetton_wallet_address(cell state_init) {
     .end_cell().begin_parse();
 }
 
-;; Адрес владельца платформы (получает 1.5% комиссии)
-slice get_owner_tax_address() inline {
-    ;; UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02
+;; Адрес владельца платформы (получает 4% комиссии)
+;; UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02
+slice get_platform_owner_address() inline {
     return begin_cell()
         .store_uint(4, 3)
         .store_int(0, 8)
@@ -107,7 +101,7 @@ slice get_owner_tax_address() inline {
 
     (int balance, slice owner_address, slice jetton_master_address, cell jetton_wallet_code) = load_data();
 
-    ;; ── Transfer (с комиссией 3%) ─────────────────────────────────────
+    ;; ── Transfer (с комиссией 5%) ─────────────────────────────────────
     if (op == op::transfer) {
         throw_unless(705, equal_slices(sender_address, owner_address));
         int jetton_amount = in_msg_body~load_coins();
@@ -118,18 +112,18 @@ slice get_owner_tax_address() inline {
         cell fwd_payload = in_msg_body;
 
         ;; Рассчитываем налог
-        int tax_total = (jetton_amount * TAX_NUMERATOR) / TAX_DENOMINATOR;  ;; 3%
-        int tax_burn  = tax_total / 2;   ;; 1.5% — сжигается
-        int tax_owner = tax_total - tax_burn;  ;; 1.5% — владельцу
-        int amount_after_tax = jetton_amount - tax_total;
+        int tax_burn  = (jetton_amount * TAX_BURN_NUMERATOR)  / TAX_DENOMINATOR;  ;; 1%
+        int tax_owner = (jetton_amount * TAX_OWNER_NUMERATOR) / TAX_DENOMINATOR;  ;; 4%
+        int tax_total = tax_burn + tax_owner;                                       ;; 5%
+        int amount_after_tax = jetton_amount - tax_total;                           ;; 95%
 
         throw_unless(706, balance >= jetton_amount);
         balance -= jetton_amount;
 
-        ;; 1. Отправляем получателю (после налога)
+        ;; 1. Отправляем получателю (95%)
         send_tokens(to_address, amount_after_tax, query_id, jetton_master_address, jetton_wallet_code, fwd_amount, fwd_payload, response_address);
 
-        ;; 2. Burn часть (1.5%) — отправляем burn на master
+        ;; 2. Burn 1% — уведомляем master контракт
         var burn_msg = begin_cell()
             .store_uint(op::burn, 32)
             .store_uint(query_id, 64)
@@ -144,8 +138,8 @@ slice get_owner_tax_address() inline {
             .store_ref(burn_msg);
         send_raw_message(msg_to_master.end_cell(), 1);
 
-        ;; 3. Отправляем 1.5% владельцу платформы
-        send_tokens(get_owner_tax_address(), tax_owner, query_id, jetton_master_address, jetton_wallet_code, 0, null(), response_address);
+        ;; 3. Отправляем 4% владельцу платформы
+        send_tokens(get_platform_owner_address(), tax_owner, query_id, jetton_master_address, jetton_wallet_code, 0, null(), response_address);
 
         save_data(balance, owner_address, jetton_master_address, jetton_wallet_code);
         return ();
@@ -158,7 +152,6 @@ slice get_owner_tax_address() inline {
         slice response_address = in_msg_body~load_msg_addr();
         int fwd_amount = in_msg_body~load_coins();
 
-        ;; Проверяем что отправитель — валидный jetton wallet или master
         cell state_init = calculate_jetton_wallet_state_init(from_address, jetton_master_address, jetton_wallet_code);
         slice expected_wallet = calculate_jetton_wallet_address(state_init);
         throw_unless(707,
