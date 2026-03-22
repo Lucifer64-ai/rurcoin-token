@@ -8,44 +8,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install ton-compiler
         run: npm install -g ton-compiler
 
-      - name: Download stdlib.fc
+      - name: Download stdlib
         run: |
           mkdir -p contracts/imports
           curl -fsSL https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -o contracts/imports/stdlib.fc
-          echo "✅ stdlib.fc downloaded"
-          ls -la contracts/imports/
 
-      - name: Compile jetton-minter.fc
+      - name: Compile contracts
         run: |
           mkdir -p build
           ton-compiler --input contracts/jetton-minter.fc --stdlib contracts/imports/stdlib.fc --output build/jetton-minter.boc
-          echo "✅ jetton-minter.boc compiled"
-
-      - name: Compile jetton-wallet.fc
-        run: |
           ton-compiler --input contracts/jetton-wallet.fc --stdlib contracts/imports/stdlib.fc --output build/jetton-wallet.boc
-          echo "✅ jetton-wallet.boc compiled"
-
-      - name: Show build results
-        run: |
-          echo "=== Build complete ==="
           ls -la build/
 
-      - name: Upload BOC artifacts
-        uses: actions/upload-artifact@v3
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: compiled-contracts
           path: build/*.boc
