@@ -1,15 +1,45 @@
 const { compileFunc } = require('@ton-community/func-js');
 const fs = require('fs');
+const https = require('https');
 const path = require('path');
+
+function download(url, dest) {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const file = fs.createWriteStream(dest);
+    https.get(url, res => {
+      if (res.statusCode === 302 || res.statusCode === 301) {
+        file.close();
+        return download(res.headers.location, dest).then(resolve).catch(reject);
+      }
+      res.pipe(file);
+      file.on('finish', () => file.close(resolve));
+    }).on('error', reject);
+  });
+}
 
 async function main() {
   fs.mkdirSync('build', { recursive: true });
+  fs.mkdirSync('contracts/imports', { recursive: true });
+
+  // Download stdlib
+  console.log('Downloading stdlib.fc...');
+  await download(
+    'https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc',
+    'contracts/imports/stdlib.fc'
+  );
+  console.log('stdlib.fc downloaded');
+
+  const sources = (p) => {
+    if (!fs.existsSync(p)) throw new Error('File not found: ' + p);
+    return fs.readFileSync(p).toString('utf-8');
+  };
 
   // Compile jetton-minter
   console.log('Compiling jetton-minter.fc...');
   const minterResult = await compileFunc({
     targets: ['contracts/jetton-minter.fc'],
-    sources: (path) => fs.readFileSync(path).toString('utf-8'),
+    sources,
   });
 
   if (minterResult.status === 'error') {
@@ -24,7 +54,7 @@ async function main() {
   console.log('Compiling jetton-wallet.fc...');
   const walletResult = await compileFunc({
     targets: ['contracts/jetton-wallet.fc'],
-    sources: (path) => fs.readFileSync(path).toString('utf-8'),
+    sources,
   });
 
   if (walletResult.status === 'error') {
@@ -36,8 +66,7 @@ async function main() {
   console.log('jetton-wallet.boc written');
 
   console.log('Compilation successful!');
-  const files = fs.readdirSync('build');
-  console.log('Build dir:', files);
+  console.log('Build dir:', fs.readdirSync('build'));
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
