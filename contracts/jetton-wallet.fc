@@ -18,7 +18,6 @@ const int TAX_BURN_NUMERATOR  = 1;   ;; 1%
 const int TAX_OWNER_NUMERATOR = 4;   ;; 4%
 const int TAX_DENOMINATOR     = 100;
 
-;; Storage: balance, owner_address, jetton_master_address, jetton_wallet_code
 (int, slice, slice, cell) load_data() inline {
     slice ds = get_data().begin_parse();
     return (
@@ -59,7 +58,7 @@ slice calculate_jetton_wallet_address(cell state_init) {
     .end_cell().begin_parse();
 }
 
-() send_tokens(slice to_address, int amount, int query_id, slice jetton_master_address, cell jetton_wallet_code, int fwd_amount, cell fwd_payload, slice response_address) impure {
+() send_tokens(slice to_address, int amount, int query_id, slice jetton_master_address, cell jetton_wallet_code, int fwd_amount, slice fwd_payload, slice response_address) impure {
     cell state_init = calculate_jetton_wallet_state_init(to_address, jetton_master_address, jetton_wallet_code);
     slice to_wallet_address = calculate_jetton_wallet_address(state_init);
     cell msg_body = begin_cell()
@@ -69,7 +68,7 @@ slice calculate_jetton_wallet_address(cell state_init) {
         .store_slice(to_address)
         .store_slice(response_address)
         .store_coins(fwd_amount)
-        .store_maybe_ref(fwd_payload)
+        .store_slice(fwd_payload)
     .end_cell();
     var msg = begin_cell()
         .store_uint(0x18, 6)
@@ -92,7 +91,7 @@ slice calculate_jetton_wallet_address(cell state_init) {
 
     (int balance, slice owner_address, slice jetton_master_address, cell jetton_wallet_code) = load_data();
 
-    ;; Transfer (with 5% tax: 1% burn + 4% to owner)
+    ;; Transfer (5% tax: 1% burn + 4% to owner)
     if (op == op::transfer) {
         throw_unless(705, equal_slices(sender_address, owner_address));
         int jetton_amount = in_msg_body~load_coins();
@@ -100,9 +99,8 @@ slice calculate_jetton_wallet_address(cell state_init) {
         slice response_address = in_msg_body~load_msg_addr();
         in_msg_body~load_int(1);  ;; custom_payload flag
         int fwd_amount = in_msg_body~load_coins();
-        cell fwd_payload = in_msg_body;
+        slice fwd_payload = in_msg_body;  ;; slice, not cell
 
-        ;; Calculate tax
         int tax_burn  = (jetton_amount * TAX_BURN_NUMERATOR)  / TAX_DENOMINATOR;  ;; 1%
         int tax_owner = (jetton_amount * TAX_OWNER_NUMERATOR) / TAX_DENOMINATOR;  ;; 4%
         int tax_total = tax_burn + tax_owner;                                       ;; 5%
@@ -130,13 +128,14 @@ slice calculate_jetton_wallet_address(cell state_init) {
         send_raw_message(msg_to_master.end_cell(), 1);
 
         ;; 3. Send 4% to owner
-        send_tokens(owner_address, tax_owner, query_id, jetton_master_address, jetton_wallet_code, 0, null(), response_address);
+        slice empty_payload = begin_cell().end_cell().begin_parse();
+        send_tokens(owner_address, tax_owner, query_id, jetton_master_address, jetton_wallet_code, 0, empty_payload, response_address);
 
         save_data(balance, owner_address, jetton_master_address, jetton_wallet_code);
         return ();
     }
 
-    ;; Internal transfer (from another wallet)
+    ;; Internal transfer
     if (op == op::internal_transfer) {
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
