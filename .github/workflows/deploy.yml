@@ -25,7 +25,7 @@ jobs:
       - name: Install Node dependencies
         run: npm install --save-dev @ton/ton @ton/crypto @ton/core
 
-      - name: Setup FunC
+      - name: Setup FunC and Fift
         run: |
           wget -q https://github.com/ton-blockchain/ton/releases/download/v2024.01/func-linux-x86_64 -O /usr/local/bin/func
           chmod +x /usr/local/bin/func
@@ -52,25 +52,18 @@ jobs:
       - name: Compile and convert to BOC
         run: |
           mkdir -p build
-
-          # Compile to .fif
           func -o build/jetton-minter.fif -SPA contracts/imports/stdlib.fc contracts/jetton-minter.fc
           func -o build/jetton-wallet.fif -SPA contracts/imports/stdlib.fc contracts/jetton-wallet.fc
-
-          # Create fift scripts to save BOC
           cat > build/save-minter.fif << 'EOF'
-          "build/jetton-minter.fif" include
-          2 boc+encode "build/jetton-minter.boc" B->file
-          EOF
-
+"build/jetton-minter.fif" include
+2 boc+encode "build/jetton-minter.boc" B->file
+EOF
           cat > build/save-wallet.fif << 'EOF'
-          "build/jetton-wallet.fif" include
-          2 boc+encode "build/jetton-wallet.boc" B->file
-          EOF
-
+"build/jetton-wallet.fif" include
+2 boc+encode "build/jetton-wallet.boc" B->file
+EOF
           fift -I $FIFTPATH -s build/save-minter.fif
           fift -I $FIFTPATH -s build/save-wallet.fif
-
           echo "BOC files:"
           ls -la build/*.boc
 
@@ -78,7 +71,7 @@ jobs:
         env:
           WALLET_MNEMONIC: ${{ secrets.WALLET_MNEMONIC }}
           TONCENTER_API_KEY: ${{ secrets.TONCENTER_API_KEY }}
-          OWNER_ADDRESS: UQ@ìPcMK0rW2etIRSTêIInPZYf8xRC4b-h0wcsKNe7v5E-02
+          OWNER_ADDRESS: UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02
         run: node scripts/deploy.js
 
       - name: Save contract address
