@@ -18,47 +18,13 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Node dependencies
-        run: npm install --save-dev @ton/ton @ton/crypto @ton/core
-
-      - name: Setup FunC and Fift
+      - name: Install dependencies
         run: |
-          wget -q https://github.com/ton-blockchain/ton/releases/download/v2024.01/func-linux-x86_64 -O /usr/local/bin/func
-          chmod +x /usr/local/bin/func
-          wget -q https://github.com/ton-blockchain/ton/releases/download/v2024.01/fift-linux-x86_64 -O /usr/local/bin/fift
-          chmod +x /usr/local/bin/fift
+          npm install --save-dev @ton/ton @ton/crypto @ton/core
+          npm install --save-dev @ton-community/func-js
 
-      - name: Download Fift stdlib
-        run: |
-          mkdir -p ~/fift-libs
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/Fift.fif -O ~/fift-libs/Fift.fif
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/FiftExt.fif -O ~/fift-libs/FiftExt.fif
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/Asm.fif -O ~/fift-libs/Asm.fif
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/TonUtil.fif -O ~/fift-libs/TonUtil.fif
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/Lists.fif -O ~/fift-libs/Lists.fif
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/Color.fif -O ~/fift-libs/Color.fif
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/fift/lib/Stack.fif -O ~/fift-libs/Stack.fif
-          echo "FIFTPATH=$HOME/fift-libs" >> $GITHUB_ENV
-
-      - name: Download FunC stdlib
-        run: |
-          mkdir -p contracts/imports
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -O contracts/imports/stdlib.fc
-
-      - name: Compile FunC to Fift
-        run: |
-          mkdir -p build
-          func -o build/jetton-minter.fif -SPA contracts/imports/stdlib.fc contracts/jetton-minter.fc
-          func -o build/jetton-wallet.fif -SPA contracts/imports/stdlib.fc contracts/jetton-wallet.fc
-
-      - name: Convert Fift to BOC
-        run: |
-          printf '"%s" include\n2 boc+encode "%s" B->file\n' "build/jetton-minter.fif" "build/jetton-minter.boc" > build/save-minter.fif
-          printf '"%s" include\n2 boc+encode "%s" B->file\n' "build/jetton-wallet.fif" "build/jetton-wallet.boc" > build/save-wallet.fif
-          fift -I $FIFTPATH -s build/save-minter.fif
-          fift -I $FIFTPATH -s build/save-wallet.fif
-          echo "BOC files:"
-          ls -la build/*.boc
+      - name: Compile FunC contracts via func-js
+        run: node scripts/compile.js
 
       - name: Deploy contract
         env:
