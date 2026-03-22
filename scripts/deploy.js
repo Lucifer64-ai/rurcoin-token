@@ -1,6 +1,6 @@
 const { TonClient, WalletContractV4, internal, fromNano, toNano } = require('@ton/ton');
 const { mnemonicToPrivateKey } = require('@ton/crypto');
-const { Cell, Address, beginCell } = require('@ton/core');
+const { Cell, Address, beginCell, StateInit, contractAddress } = require('@ton/core');
 const fs = require('fs');
 const path = require('path');
 
@@ -14,15 +14,12 @@ async function deploy() {
 
     console.log('🚀 Starting RURC deploy...');
     console.log('Owner address:', ownerAddress);
-    console.log('Wallet version: V4R2');
 
-    // Connect to TON mainnet
     const client = new TonClient({
         endpoint: 'https://toncenter.com/api/v2/jsonRPC',
         apiKey: apiKey,
     });
 
-    // Restore wallet from mnemonic (V4R2)
     const words = mnemonic.trim().split(' ');
     const keyPair = await mnemonicToPrivateKey(words);
     const wallet = WalletContractV4.create({
@@ -31,96 +28,97 @@ async function deploy() {
     });
     const walletContract = client.open(wallet);
     const walletAddress = wallet.address.toString({ bounceable: false });
-    console.log('Deployer wallet (V4R2):', walletAddress);
+    console.log('Deployer wallet:', walletAddress);
 
-    // Check balance
     const balance = await walletContract.getBalance();
     console.log('Balance:', fromNano(balance), 'TON');
-    if (balance < toNano('0.5')) {
-        throw new Error('Insufficient balance. Need at least 0.5 TON for deploy.');
+    if (balance < toNano('0.3')) {
+        throw new Error('Insufficient balance. Need at least 0.3 TON.');
     }
 
-    // Load compiled BOC files
+    // Load BOC files
     const minterBoc = fs.readFileSync(path.join(__dirname, '../build/jetton-minter.boc'));
     const walletBoc = fs.readFileSync(path.join(__dirname, '../build/jetton-wallet.boc'));
 
     const minterCode = Cell.fromBoc(minterBoc)[0];
     const walletCode = Cell.fromBoc(walletBoc)[0];
 
-    // Build initial data for jetton-minter
-    const totalSupply = 0n;
-    const adminAddress = Address.parse(ownerAddress);
-
-    // Jetton content (on-chain metadata)
+    // Jetton content cell (off-chain metadata URL)
     const jettonContent = beginCell()
-        .storeUint(0, 8)
+        .storeUint(0x01, 8) // off-chain
         .storeStringTail('https://lucifer64-ai.github.io/rurcoin-mini-app/jetton-metadata.json')
         .endCell();
 
+    // Initial minter data
+    const adminAddr = Address.parse(ownerAddress);
     const minterData = beginCell()
-        .storeCoins(totalSupply)
-        .storeAddress(adminAddress)
-        .storeRef(jettonContent)
-        .storeRef(walletCode)
+        .storeCoins(0n)           // total_supply
+        .storeAddress(adminAddr)  // admin_address
+        .storeRef(jettonContent)  // content
+        .storeRef(walletCode)     // jetton_wallet_code
         .endCell();
 
-    // Build StateInit
-    const stateInit = beginCell()
-        .storeUint(0, 2)
-        .storeMaybeRef(minterCode)
-        .storeMaybeRef(minterData)
-        .storeUint(0, 1)
-        .endCell();
+    // StateInit using @ton/core helper
+    const init = { code: minterCode, data: minterData };
+    const deployAddress = contractAddress(0, init);
+    const deployAddressStr = deployAddress.toString({ bounceable: true });
+    console.log('Contract address:', deployAddressStr);
 
-    const contractAddress = new Address(0, stateInit.hash());
-    const contractAddressStr = contractAddress.toString({ bounceable: true });
-    console.log('Contract address:', contractAddressStr);
-
-    // Check if already deployed
+    // Check if already active
     try {
-        const state = await client.getContractState(contractAddress);
+        const state = await client.getContractState(deployAddress);
         if (state.state === 'active') {
-            console.log('✅ Contract already deployed at:', contractAddressStr);
-            fs.writeFileSync('build/contract-address.txt', contractAddressStr);
+            console.log('✅ Already deployed:', deployAddressStr);
+            fs.writeFileSync('build/contract-address.txt', deployAddressStr);
             return;
         }
-    } catch (e) {}
+        console.log('Current state:', state.state);
+    } catch (e) {
+        console.log('State check error (normal for new contract):', e.message);
+    }
 
-    // Deploy
+    // Send deploy transaction
     const seqno = await walletContract.getSeqno();
+    console.log('Seqno:', seqno);
+
     await walletContract.sendTransfer({
         secretKey: keyPair.secretKey,
         seqno,
         messages: [
             internal({
-                to: contractAddress,
-                value: toNano('0.1'),
-                init: stateInit,
+                to: deployAddress,
+                value: toNano('0.15'),
+                init,
                 body: beginCell().endCell(),
                 bounce: false,
             }),
         ],
     });
 
-    console.log('🐤 Deploy transaction sent. Waiting for confirmation...');
+    console.log('📤 Deploy tx sent. Waiting for confirmation...');
 
-    // Wait for deploy
-    for (let i = 0; i < 30; i++) {
+    // Wait up to 2 minutes
+    for (let i = 1; i <= 40; i++) {
         await new Promise(r => setTimeout(r, 3000));
         try {
-            const state = await client.getContractState(contractAddress);
+            const state = await client.getContractState(deployAddress);
+            console.log(`Attempt ${i}: state = ${state.state}`);
             if (state.state === 'active') {
                 console.log('✅ Contract deployed successfully!');
-                console.log('Address:', contractAddressStr);
-                console.log('Explorer: https://tonscan.org/address/' + contractAddressStr);
-                fs.writeFileSync('build/contract-address.txt', contractAddressStr);
+                console.log('Address:', deployAddressStr);
+                console.log('Explorer: https://tonviewer.com/' + deployAddressStr);
+                fs.writeFileSync('build/contract-address.txt', deployAddressStr);
                 return;
             }
-        } catch (e) {}
-        console.log('Waiting... attempt', i + 1);
+        } catch (e) {
+            console.log(`Attempt ${i}: error - ${e.message}`);
+        }
     }
 
-    throw new Error('Deploy timeout. Check transaction manually.');
+    // Even if timeout — save address anyway
+    console.log('⚠️ Timeout but tx was sent. Contract address:', deployAddressStr);
+    fs.writeFileSync('build/contract-address.txt', deployAddressStr);
+    console.log('Check manually: https://tonviewer.com/' + deployAddressStr);
 }
 
 deploy().catch(e => {
