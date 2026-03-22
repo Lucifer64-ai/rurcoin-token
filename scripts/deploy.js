@@ -1,19 +1,20 @@
-const { TonClient, WalletContractV4, internal, fromNano, toNano } = require('@ton/ton');
+const { TonClient, WalletContractV4, WalletContractV5R1, internal, fromNano, toNano } = require('@ton/ton');
 const { mnemonicToPrivateKey } = require('@ton/crypto');
-const { Cell } = require('@ton/core');
+const { Cell, Address, beginCell } = require('@ton/core');
 const fs = require('fs');
 const path = require('path');
 
 async function deploy() {
     const mnemonic = process.env.WALLET_MNEMONIC;
     const apiKey = process.env.TONCENTER_API_KEY;
-    const ownerAddress = process.env.OWNER_ADDRESS || 'UQBv5qIVT1x5BD1uOJFKqMMqQfZbdaqExRuIATNCn_HiCGoI';
+    const ownerAddress = process.env.OWNER_ADDRESS || 'UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02';
 
     if (!mnemonic) throw new Error('WALLET_MNEMONIC not set');
     if (!apiKey) throw new Error('TONCENTER_API_KEY not set');
 
     console.log('🚀 Starting RURC deploy...');
     console.log('Owner address:', ownerAddress);
+    console.log('Wallet version: W5 (V5R1)');
 
     // Connect to TON mainnet
     const client = new TonClient({
@@ -21,16 +22,16 @@ async function deploy() {
         apiKey: apiKey,
     });
 
-    // Restore wallet from mnemonic
+    // Restore wallet from mnemonic (W5)
     const words = mnemonic.trim().split(' ');
     const keyPair = await mnemonicToPrivateKey(words);
-    const wallet = WalletContractV4.create({
+    const wallet = WalletContractV5R1.create({
         publicKey: keyPair.publicKey,
         workchain: 0,
     });
     const walletContract = client.open(wallet);
     const walletAddress = wallet.address.toString({ bounceable: false });
-    console.log('Deployer wallet:', walletAddress);
+    console.log('Deployer wallet (W5):', walletAddress);
 
     // Check balance
     const balance = await walletContract.getBalance();
@@ -47,13 +48,12 @@ async function deploy() {
     const walletCode = Cell.fromBoc(walletBoc)[0];
 
     // Build initial data for jetton-minter
-    const { Address, beginCell } = require('@ton/core');
-    const totalSupply = 0n; // starts at 0, mint separately
+    const totalSupply = 0n;
     const adminAddress = Address.parse(ownerAddress);
 
     // Jetton content (on-chain metadata)
     const jettonContent = beginCell()
-        .storeUint(0, 8) // on-chain
+        .storeUint(0, 8)
         .storeStringTail('https://lucifer64-ai.github.io/rurcoin-mini-app/jetton-metadata.json')
         .endCell();
 
@@ -66,10 +66,10 @@ async function deploy() {
 
     // Build StateInit
     const stateInit = beginCell()
-        .storeUint(0, 2)   // split_depth + special
+        .storeUint(0, 2)
         .storeMaybeRef(minterCode)
         .storeMaybeRef(minterData)
-        .storeUint(0, 1)   // library
+        .storeUint(0, 1)
         .endCell();
 
     const contractAddress = new Address(0, stateInit.hash());
