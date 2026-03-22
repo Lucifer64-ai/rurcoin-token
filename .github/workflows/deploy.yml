@@ -1,17 +1,13 @@
 name: Deploy RURC Contract
 
 on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type DEPLOY to confirm mainnet deploy'
-        required: true
-        default: ''
+  push:
+    branches:
+      - deploy
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event.inputs.confirm == 'DEPLOY'
 
     steps:
       - name: Checkout
