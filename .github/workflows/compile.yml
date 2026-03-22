@@ -8,36 +8,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Install FunC compiler
+        run: |
+          wget -q https://github.com/ton-blockchain/ton/releases/latest/download/func-linux-x86_64 -O /usr/local/bin/func
+          chmod +x /usr/local/bin/func
+          func --version || echo "func installed"
 
-      - name: Install ton-compiler
-        run: npm install -g ton-compiler
-
-      - name: Download stdlib
+      - name: Download stdlib.fc
         run: |
           mkdir -p contracts/imports
           curl -fsSL https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -o contracts/imports/stdlib.fc
+          echo "stdlib.fc downloaded"
 
-      - name: Compile contracts
+      - name: Compile jetton-minter.fc
         run: |
           mkdir -p build
-          ton-compiler --input contracts/jetton-minter.fc --stdlib contracts/imports/stdlib.fc --output build/jetton-minter.boc
-          ton-compiler --input contracts/jetton-wallet.fc --stdlib contracts/imports/stdlib.fc --output build/jetton-wallet.boc
-          ls -la build/
+          func -o build/jetton-minter.fif -SPA contracts/imports/stdlib.fc contracts/jetton-minter.fc
+          echo "jetton-minter compiled"
+
+      - name: Compile jetton-wallet.fc
+        run: |
+          func -o build/jetton-wallet.fif -SPA contracts/imports/stdlib.fc contracts/jetton-wallet.fc
+          echo "jetton-wallet compiled"
+
+      - name: Show results
+        run: ls -la build/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: compiled-contracts
-          path: build/*.boc
+          path: build/
           retention-days: 30
