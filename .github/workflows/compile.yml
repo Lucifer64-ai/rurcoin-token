@@ -18,54 +18,35 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Blueprint
-        run: npm install --global @ton/blueprint
-
-      - name: Install func compiler
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y wget
-          wget -q https://github.com/ton-blockchain/ton/releases/latest/download/func -O /usr/local/bin/func
-          chmod +x /usr/local/bin/func
+      - name: Install ton-compiler
+        run: npm install -g ton-compiler
 
       - name: Download stdlib.fc
         run: |
           mkdir -p contracts/imports
-          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -O contracts/imports/stdlib.fc
+          curl -fsSL https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -o contracts/imports/stdlib.fc
+          echo "✅ stdlib.fc downloaded"
+          ls -la contracts/imports/
 
       - name: Compile jetton-minter.fc
         run: |
           mkdir -p build
-          func -o build/jetton-minter.fif -SPA contracts/imports/stdlib.fc contracts/jetton-minter.fc
-          echo "✅ jetton-minter compiled"
+          ton-compiler --input contracts/jetton-minter.fc --stdlib contracts/imports/stdlib.fc --output build/jetton-minter.boc
+          echo "✅ jetton-minter.boc compiled"
 
       - name: Compile jetton-wallet.fc
         run: |
-          func -o build/jetton-wallet.fif -SPA contracts/imports/stdlib.fc contracts/jetton-wallet.fc
-          echo "✅ jetton-wallet compiled"
+          ton-compiler --input contracts/jetton-wallet.fc --stdlib contracts/imports/stdlib.fc --output build/jetton-wallet.boc
+          echo "✅ jetton-wallet.boc compiled"
 
-      - name: Convert Fift to BOC
+      - name: Show build results
         run: |
-          wget -q https://github.com/ton-blockchain/ton/releases/latest/download/fift -O /usr/local/bin/fift
-          chmod +x /usr/local/bin/fift
-          wget -q https://github.com/ton-blockchain/ton/releases/latest/download/fiftlib.zip -O /tmp/fiftlib.zip
-          unzip -q /tmp/fiftlib.zip -d /usr/local/lib/fift
-          export FIFTPATH=/usr/local/lib/fift
-          fift -s build/jetton-minter.fif
-          fift -s build/jetton-wallet.fif
+          echo "=== Build complete ==="
           ls -la build/
 
       - name: Upload BOC artifacts
         uses: actions/upload-artifact@v3
         with:
           name: compiled-contracts
-          path: |
-            build/*.boc
-            build/*.fif
+          path: build/*.boc
           retention-days: 30
-
-      - name: Show build results
-        run: |
-          echo "=== Build complete ==="
-          ls -la build/
-          echo "Download artifacts from Actions tab"
