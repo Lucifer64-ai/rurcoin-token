@@ -69,7 +69,7 @@ jobs:
         env:
           WALLET_MNEMONIC: ${{ secrets.WALLET_MNEMONIC }}
           TONCENTER_API_KEY: ${{ secrets.TONCENTER_API_KEY }}
-          OWNER_ADDRESS: UQBv5qIVT1x5BD1uOJFKqMMqQfZbdaqExRuIATNCn_HiCGoI
+          OWNER_ADDRESS: UQB3PcMK0rW2etIRSV0IVnPZYf8xRC4b-h0wcsKNe7v5E-02
         run: node scripts/deploy.js
 
       - name: Save contract address
