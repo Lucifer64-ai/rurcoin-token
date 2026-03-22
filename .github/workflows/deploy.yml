@@ -1,0 +1,64 @@
+name: Deploy RURC Contract
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DEPLOY to confirm mainnet deploy'
+        required: true
+        default: ''
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'DEPLOY'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install --save-dev @ton/ton @ton/crypto @ton/core
+
+      - name: Setup FunC compiler
+        run: |
+          wget -q https://github.com/ton-blockchain/ton/releases/download/v2024.01/func-linux-x86_64 -O /usr/local/bin/func
+          chmod +x /usr/local/bin/func
+          wget -q https://github.com/ton-blockchain/ton/releases/download/v2024.01/fift-linux-x86_64 -O /usr/local/bin/fift
+          chmod +x /usr/local/bin/fift
+
+      - name: Download stdlib
+        run: |
+          mkdir -p contracts/imports
+          wget -q https://raw.githubusercontent.com/ton-blockchain/ton/master/crypto/smartcont/stdlib.fc -O contracts/imports/stdlib.fc
+
+      - name: Compile contracts
+        run: |
+          mkdir -p build
+          func -o build/jetton-minter.fif -SPA contracts/imports/stdlib.fc contracts/jetton-minter.fc
+          func -o build/jetton-wallet.fif -SPA contracts/imports/stdlib.fc contracts/jetton-wallet.fc
+
+      - name: Convert to BOC
+        run: |
+          fift -s build/jetton-minter.fif
+          fift -s build/jetton-wallet.fif
+          ls -la build/
+
+      - name: Deploy contract
+        env:
+          WALLET_MNEMONIC: ${{ secrets.WALLET_MNEMONIC }}
+          TONCENTER_API_KEY: ${{ secrets.TONCENTER_API_KEY }}
+          OWNER_ADDRESS: UQBv5qIVT1x5BD1uOJFKqMMqQfZbdaqExRuIATNCn_HiCGoI
+        run: node scripts/deploy.js
+
+      - name: Save contract address
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-address
+          path: build/contract-address.txt
